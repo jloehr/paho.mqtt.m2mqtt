@@ -222,7 +222,7 @@ namespace uPLibrary.Networking.M2Mqtt
         /// <summary>
         /// Will message
         /// </summary>
-        public string WillMessage { get; private set; }
+        public byte[] WillMessage { get; private set; }
 
         /// <summary>
         /// MQTT protocol version
@@ -534,7 +534,7 @@ namespace uPLibrary.Networking.M2Mqtt
             byte willQosLevel,
             bool willFlag,
             string willTopic,
-            string willMessage,
+            byte[] willMessage,
             bool cleanSession,
             ushort keepAlivePeriod)
         {

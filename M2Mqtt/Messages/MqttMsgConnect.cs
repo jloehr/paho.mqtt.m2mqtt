@@ -141,7 +141,7 @@ namespace uPLibrary.Networking.M2Mqtt.Messages
         /// <summary>
         /// Will message
         /// </summary>
-        public string WillMessage
+        public byte[] WillMessage
         {
             get { return this.willMessage; }
             set { this.willMessage = value; }
@@ -200,7 +200,7 @@ namespace uPLibrary.Networking.M2Mqtt.Messages
         // will topic
         private string willTopic;
         // will message
-        private string willMessage;
+        private byte[] willMessage;
         // username
         private string username;
         // password
@@ -248,7 +248,7 @@ namespace uPLibrary.Networking.M2Mqtt.Messages
             byte willQosLevel,
             bool willFlag,
             string willTopic,
-            string willMessage,
+            byte[] willMessage,
             bool cleanSession,
             ushort keepAlivePeriod,
             byte protocolVersion
@@ -290,8 +290,7 @@ namespace uPLibrary.Networking.M2Mqtt.Messages
             byte[] clientIdUtf8;
             int willTopicUtf8Length;
             byte[] willTopicUtf8;
-            int willMessageUtf8Length;
-            byte[] willMessageUtf8;
+            int willMessageLength;
             int usernameUtf8Length;
             byte[] usernameUtf8;
             int passwordUtf8Length;
@@ -360,12 +359,14 @@ namespace uPLibrary.Networking.M2Mqtt.Messages
                 index += willTopicUtf8Length;
                 msg.willTopic = new String(Encoding.UTF8.GetChars(willTopicUtf8));
 
-                willMessageUtf8Length = ((buffer[index++] << 8) & 0xFF00);
-                willMessageUtf8Length |= buffer[index++];
-                willMessageUtf8 = new byte[willMessageUtf8Length];
-                Array.Copy(buffer, index, willMessageUtf8, 0, willMessageUtf8Length);
-                index += willMessageUtf8Length;
-                msg.willMessage = new String(Encoding.UTF8.GetChars(willMessageUtf8));
+                willMessageLength = ((buffer[index++] << 8) & 0xFF00);
+                willMessageLength |= buffer[index++];
+                if(willMessageLength > 0)
+                {
+                    msg.willMessage = new byte[willMessageLength];
+                    Array.Copy(buffer, index, msg.willMessage, 0, willMessageLength);
+                    index += willMessageLength;
+                }
             }
 
             // username
@@ -404,7 +405,8 @@ namespace uPLibrary.Networking.M2Mqtt.Messages
 
             byte[] clientIdUtf8 = Encoding.UTF8.GetBytes(this.clientId);
             byte[] willTopicUtf8 = (this.willFlag && (this.willTopic != null)) ? Encoding.UTF8.GetBytes(this.willTopic) : null;
-            byte[] willMessageUtf8 = (this.willFlag && (this.willMessage != null)) ? Encoding.UTF8.GetBytes(this.willMessage) : null;
+            byte[] willMessage = (this.willFlag) ? this.willMessage : null;
+            int willMessageLength = (this.willMessage != null) ? this.willMessage.Length : 0;
             byte[] usernameUtf8 = ((this.username != null) && (this.username.Length > 0)) ? Encoding.UTF8.GetBytes(this.username) : null;
             byte[] passwordUtf8 = ((this.password != null) && (this.password.Length > 0)) ? Encoding.UTF8.GetBytes(this.password) : null;
 
@@ -413,15 +415,13 @@ namespace uPLibrary.Networking.M2Mqtt.Messages
             {
                 // will flag set, will topic and will message MUST be present
                 if (this.willFlag &&  ((this.willQosLevel >= 0x03) ||
-                                       (willTopicUtf8 == null) || (willMessageUtf8 == null) ||
-                                       ((willTopicUtf8 != null) && (willTopicUtf8.Length == 0)) || 
-                                       ((willMessageUtf8 != null) && (willMessageUtf8.Length == 0))))
+                                       (willTopicUtf8 == null) || 
+                                       ((willTopicUtf8 != null) && (willTopicUtf8.Length == 0))))
                     throw new MqttClientException(MqttClientErrorCode.WillWrong);
                 // willflag not set, retain must be 0 and will topic and message MUST NOT be present
                 else if (!this.willFlag && ((this.willRetain) ||
-                                            (willTopicUtf8 != null) || (willMessageUtf8 != null) ||
-                                            ((willTopicUtf8 != null) && (willTopicUtf8.Length != 0)) || 
-                                            ((willMessageUtf8 != null) && (willMessageUtf8.Length != 0))))
+                                            (willTopicUtf8 != null) || (willMessage != null) ||
+                                            ((willTopicUtf8 != null) && (willTopicUtf8.Length != 0))))
                     throw new MqttClientException(MqttClientErrorCode.WillWrong);
             }
 
@@ -454,9 +454,9 @@ namespace uPLibrary.Networking.M2Mqtt.Messages
             // client identifier field size
             payloadSize += clientIdUtf8.Length + 2;
             // will topic field size
-            payloadSize += (willTopicUtf8 != null) ? (willTopicUtf8.Length + 2) : 0;
+            payloadSize += ((this.willFlag) && (willTopicUtf8 != null)) ? (willTopicUtf8.Length + 2) : 0;
             // will message field size
-            payloadSize += (willMessageUtf8 != null) ? (willMessageUtf8.Length + 2) : 0;
+            payloadSize += (this.willFlag) ? (willMessageLength + 2) : 0;
             // username field size
             payloadSize += (usernameUtf8 != null) ? (usernameUtf8.Length + 2) : 0;
             // password field size
@@ -538,12 +538,15 @@ namespace uPLibrary.Networking.M2Mqtt.Messages
             }
 
             // will message
-            if (this.willFlag && (willMessageUtf8 != null))
+            if (this.willFlag)
             {
-                buffer[index++] = (byte)((willMessageUtf8.Length >> 8) & 0x00FF); // MSB
-                buffer[index++] = (byte)(willMessageUtf8.Length & 0x00FF); // LSB
-                Array.Copy(willMessageUtf8, 0, buffer, index, willMessageUtf8.Length);
-                index += willMessageUtf8.Length;
+                buffer[index++] = (byte)((willMessageLength >> 8) & 0x00FF); // MSB
+                buffer[index++] = (byte)(willMessageLength & 0x00FF); // LSB
+                if((this.willMessage != null) && (willMessageLength > 0))
+                {
+                    Array.Copy(willMessage, 0, buffer, index, willMessageLength);
+                    index += willMessageLength;
+                }
             }
 
             // username
